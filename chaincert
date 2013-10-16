@@ -1,0 +1,120 @@
+#!/bin/bash
+
+# Variables
+appName=`basename "$0"`
+rootDir=`realpath "$0" | sed -e "s/\/$appName//g"`
+root=""
+cert=""
+out=""
+
+# Color Vars
+txtblk='\e[0;30m' # Black - Regular
+txtred='\e[0;31m' # Red
+txtgrn='\e[0;32m' # Green
+txtylw='\e[0;33m' # Yellow
+txtblu='\e[0;34m' # Blue
+txtpur='\e[0;35m' # Purple
+txtcyn='\e[0;36m' # Cyan
+txtwht='\e[0;37m' # White
+bldblk='\e[1;30m' # Black - Bold
+bldred='\e[1;31m' # Red
+bldgrn='\e[1;32m' # Green
+bldylw='\e[1;33m' # Yellow
+bldblu='\e[1;34m' # Blue
+bldpur='\e[1;35m' # Purple
+bldcyn='\e[1;36m' # Cyan
+bldwht='\e[1;37m' # White
+unkblk='\e[4;30m' # Black - Underline
+undred='\e[4;31m' # Red
+undgrn='\e[4;32m' # Green
+undylw='\e[4;33m' # Yellow
+undblu='\e[4;34m' # Blue
+undpur='\e[4;35m' # Purple
+undcyn='\e[4;36m' # Cyan
+undwht='\e[4;37m' # White
+bakblk='\e[40m'   # Black - Background
+bakred='\e[41m'   # Red
+bakgrn='\e[42m'   # Green
+bakylw='\e[43m'   # Yellow
+bakblu='\e[44m'   # Blue
+bakpur='\e[45m'   # Purple
+bakcyn='\e[46m'   # Cyan
+bakwht='\e[47m'   # White
+txtrst='\e[0m'    # Text Reset
+
+
+# Usage func
+function help {
+  echo -e "${bldgrn}Certificate Chaining Tool${txtrst}"
+  echo -e "${bldwht}Usage:${txtrst} ${txtylw}${appName} [OPTIONS] CERT${txtrst}"
+  echo "Concatenates a series of certificates in a folder tree;" 
+  echo "starting with CERT and ending with the ROOT_CERT."
+  echo
+  echo -e "${bldwht}Options:${txtrst}"
+  echo "-r ROOT_CERT          root level certificate authority"
+  echo "                        defaults to certificate in $appName dir"
+  echo "-o CHAIN_FILENAME     outputs file named CHAIN_FILENAME"
+  echo "                        defaults to CERT{name}.chain"
+  echo
+}
+
+# Use getopts to set options
+while getopts r:o: flag; do
+  case $flag in
+    r)
+      root="$OPTARG"
+      ;;
+    o)
+      out="$OPTARG"
+      ;;
+    ?)
+      help
+      exit
+      ;;
+  esac
+done
+
+shift $(($OPTIND -1))
+
+# If no CERT was specified giv'em help and exit
+if [[ -z "$1" ]]
+  then
+    help
+    exit
+else
+  cert="$1"
+fi
+
+certExt=`basename "$cert" | sed -e 's/.*\.//g'`
+certName=`basename "$cert" | sed -e "s/\.${certExt}//g"`
+
+certDir=`realpath $(echo "$cert" | sed -e 's/\/[^\/]*$//g')`
+[ ! -z "$root" ] && rootDir=`realpath $(echo "$root" | sed -e 's/\/[^\/]*$//g')`
+
+if [[ "$certDir" == "$rootDir" ]]
+  then
+    echo -e "${bldred}CERT and ROOT_CERT cannot be same file!${txtrst}"
+    exit
+fi
+
+chain=$cert
+
+# While-out from CERT to ROOT_CERT, building ca chain string
+while [ $certDir != $rootDir ]
+  do
+    certDir=`echo "$certDir" | sed -e 's/\/[^\/]*$//g'`
+    curCert=`find "$certDir" -maxdepth 1 -type f|grep ".$certExt"`
+    chain+=" $curCert"
+done
+
+certDir=`realpath "$cert" | sed -e 's/\/[^\/]*$//g'`
+[ ! -z "$out" ] && chainName="$out" || chainName="${certName}.chain"
+
+cat $chain > $certDir/$chainName
+
+if [ -a "$certDir/$chainName" ]
+  then
+  echo -e "${bldwht}Certificate chain ${bldgrn}$certDir/$chainName${bldwht} created.${txtrst}"
+else
+  echo -e "${bldwht}Error creating certificate chain ${bldred}$certDir/$chainName${bldwht}.${txtrst}"
+fi
